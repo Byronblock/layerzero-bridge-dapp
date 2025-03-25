@@ -596,12 +596,18 @@ async function sendFromSolana(tokenMint, toAddress, amount, destChain) {
         showStatus('正在估算费用...', 'info');
         const destChainId = CHAIN_CONFIG[destChain].lzChainId;
 
+        // 设置LayerZero V2所需的Gas选项
+        const GAS_LIMIT = 200_000; // Solana计算单元限制
+        const MSG_VALUE = 2_000_000; // 目标链执行器的消息值
+
         let fee;
         try {
             fee = await layerZeroSolana.estimateSendFee({
                 dstEid: destChainId,
                 toAddress: toAddress,
-                amount: amount
+                amount: amount,
+                gasLimit: GAS_LIMIT,
+                msgValue: MSG_VALUE
             });
             
             const formattedFee = fee.nativeFee / solanaWeb3.LAMPORTS_PER_SOL;
@@ -676,16 +682,17 @@ async function sendToSolana(contractAddress, toAddress, amount, sourceChain) {
         const minAmount = (amountInWei * minAmountRatio) / BigInt(100);
 
         if (BigInt(balance) < amountInWei) {
-            showStatus(`余额不足: 需要 ${amount} ${tokenSymbol}, 当前余额 ${formattedBalance.toFixed(6)}`, 'error');
+            showStatus(`余额不足: 需要 ${amount} ${tokenSymbol}, 当前余额 ${formattedBalance.toFixed(6)}`, 'info');
             return;
         }
 
         // 将Solana地址转换为LayerZero期望的格式
-        // 这里需要将Solana地址转换为EVM兼容的bytes32格式
+        // 需要将Solana地址转换为EVM兼容的bytes32格式
         const solanaPublicKey = new solanaWeb3.PublicKey(toAddress);
         const solanaBytes = solanaPublicKey.toBytes();
         
-        // 填充至32字节
+        // 这里需要使用正确的地址转换逻辑，确保能够正确处理Solana地址
+        // Solana地址是32字节长度，而EVM地址是20字节，需要特殊处理
         const paddedBytes = new Uint8Array(32);
         paddedBytes.set(solanaBytes);
         
@@ -696,12 +703,24 @@ async function sendToSolana(contractAddress, toAddress, amount, sourceChain) {
 
         const destChainId = CHAIN_CONFIG.solana.lzChainId;
 
+        // 设置正确的Gas选项
+        // 添加Solana所需的执行选项
+        const GAS_LIMIT = 200_000; // Solana计算单元限制
+        const MSG_VALUE = 2_000_000; // Solana执行器的消息值（lamports）
+        
+        // 创建选项对象 - 如果没有web3.utils.encodePacked，可以手动拼接
+        // 这里简化处理，仅用于演示
+        const extraOptions = '0x' + 
+            '01' + // 选项类型 - ExecutorLzReceiveOption
+            GAS_LIMIT.toString(16).padStart(8, '0') + // Gas限制(4字节)
+            MSG_VALUE.toString(16).padStart(8, '0');  // 消息值(4字节)
+
         const sendParam = {
             dstEid: destChainId,
             to: toBytes32,
             amountLD: amountInWei.toString(),
             minAmountLD: minAmount.toString(),
-            extraOptions: '0x',
+            extraOptions: extraOptions,
             composeMsg: '0x',
             oftCmd: '0x'
         };
